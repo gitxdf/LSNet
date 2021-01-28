@@ -5,15 +5,15 @@
 
 import os
 
-ROOT_DATASET = '/ssd/video/'  # '/data/jilin/'
+ROOT_DATASET = '/backup/dfxue/'
 
 
 def return_ucf101(modality):
-    filename_categories = 'UCF101/labels/classInd.txt'
+    filename_categories = 'ucf101/ucfTrainTestlist/classInd.txt'
     if modality == 'RGB':
-        root_data = ROOT_DATASET + 'UCF101/jpg'
-        filename_imglist_train = 'UCF101/file_list/ucf101_rgb_train_split_1.txt'
-        filename_imglist_val = 'UCF101/file_list/ucf101_rgb_val_split_1.txt'
+        root_data = ROOT_DATASET
+        filename_imglist_train = 'ucf101/ucfTrainTestlist/train_video01.txt'
+        filename_imglist_val = 'ucf101/ucfTrainTestlist/test_video01.txt'
         prefix = 'img_{:05d}.jpg'
     elif modality == 'Flow':
         root_data = ROOT_DATASET + 'UCF101/jpg'
@@ -43,11 +43,11 @@ def return_hmdb51(modality):
 
 
 def return_something(modality):
-    filename_categories = 'something/v1/category.txt'
+    filename_categories = 'ssv1/category.txt'
     if modality == 'RGB':
-        root_data = ROOT_DATASET + 'something/v1/20bn-something-something-v1'
-        filename_imglist_train = 'something/v1/train_videofolder.txt'
-        filename_imglist_val = 'something/v1/val_videofolder.txt'
+        root_data = ROOT_DATASET + 'ssv1'
+        filename_imglist_train = 'train_videofolder.txt'
+        filename_imglist_val = 'val_videofolder.txt'
         prefix = '{:05d}.jpg'
     elif modality == 'Flow':
         root_data = ROOT_DATASET + 'something/v1/20bn-something-something-v1-flow'
@@ -81,9 +81,9 @@ def return_jester(modality):
     filename_categories = 'jester/category.txt'
     if modality == 'RGB':
         prefix = '{:05d}.jpg'
-        root_data = ROOT_DATASET + 'jester/20bn-jester-v1'
-        filename_imglist_train = 'jester/train_videofolder.txt'
-        filename_imglist_val = 'jester/val_videofolder.txt'
+        root_data = ROOT_DATASET + 'jester'
+        filename_imglist_train = 'train_videofolder.txt'
+        filename_imglist_val = 'val_videofolder.txt'
     else:
         raise NotImplementedError('no such modality:'+modality)
     return filename_categories, filename_imglist_train, filename_imglist_val, root_data, prefix
@@ -92,26 +92,27 @@ def return_jester(modality):
 def return_kinetics(modality):
     filename_categories = 400
     if modality == 'RGB':
-        root_data = ROOT_DATASET + 'kinetics/images'
-        filename_imglist_train = 'kinetics/labels/train_videofolder.txt'
-        filename_imglist_val = 'kinetics/labels/val_videofolder.txt'
+        root_data = ROOT_DATASET + 'kinetics/kinetics400_videos/'
+        filename_imglist_train = 'train.csv'
+        filename_imglist_val = 'val.csv'
+        filename_imglist_test = 'test.csv'
         prefix = 'img_{:05d}.jpg'
     else:
         raise NotImplementedError('no such modality:' + modality)
-    return filename_categories, filename_imglist_train, filename_imglist_val, root_data, prefix
+    return filename_categories, filename_imglist_train, filename_imglist_val, filename_imglist_test, root_data, prefix
 
 
 def return_dataset(dataset, modality):
     dict_single = {'jester': return_jester, 'something': return_something, 'somethingv2': return_somethingv2,
                    'ucf101': return_ucf101, 'hmdb51': return_hmdb51,
-                   'kinetics': return_kinetics }
+                   'kinetics': return_kinetics}
     if dataset in dict_single:
         file_categories, file_imglist_train, file_imglist_val, root_data, prefix = dict_single[dataset](modality)
     else:
-        raise ValueError('Unknown dataset '+dataset)
+        raise ValueError('Unknown dataset ' + dataset)
 
-    file_imglist_train = os.path.join(ROOT_DATASET, file_imglist_train)
-    file_imglist_val = os.path.join(ROOT_DATASET, file_imglist_val)
+    file_imglist_train = os.path.join(root_data, file_imglist_train)  # 'root_data' from 'ROOT_DATASET'
+    file_imglist_val = os.path.join(root_data, file_imglist_val)  # 'root_data' from 'ROOT_DATASET'
     if isinstance(file_categories, str):
         file_categories = os.path.join(ROOT_DATASET, file_categories)
         with open(file_categories) as f:
@@ -122,3 +123,5 @@ def return_dataset(dataset, modality):
     n_class = len(categories)
     print('{}: {} classes'.format(dataset, n_class))
     return n_class, file_imglist_train, file_imglist_val, root_data, prefix
+
+

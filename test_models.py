@@ -23,7 +23,7 @@ parser.add_argument('dataset', type=str)
 
 # may contain splits
 parser.add_argument('--weights', type=str, default=None)
-parser.add_argument('--test_segments', type=str, default=25)
+parser.add_argument('--test_segments', type=str, default=8)
 parser.add_argument('--dense_sample', default=False, action="store_true", help='use dense sample as I3D')
 parser.add_argument('--twice_sample', default=False, action="store_true", help='use twice sample for ensemble')
 parser.add_argument('--full_res', default=False, action="store_true",
@@ -31,10 +31,13 @@ parser.add_argument('--full_res', default=False, action="store_true",
 
 parser.add_argument('--test_crops', type=int, default=1)
 parser.add_argument('--coeff', type=str, default=None)
-parser.add_argument('--batch_size', type=int, default=1)
-parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
+parser.add_argument('--batch_size', type=int, default=8)
+parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 8)')
-
+parser.add_argument('--interval', type=int, default=1,
+                    help='sample interval in a segment. default:0, continuous sapling')
+parser.add_argument('--num_frame', type=int, default=3, help='number of sample in a segment. default:3')
+parser.add_argument('--gray', default=False, action="store_true", help='use gray images as the input')
 # for true test
 parser.add_argument('--test_list', type=str, default=None)
 parser.add_argument('--csv_file', type=str, default=None)
@@ -45,8 +48,8 @@ parser.add_argument('--max_num', type=int, default=-1)
 parser.add_argument('--input_size', type=int, default=224)
 parser.add_argument('--crop_fusion_type', type=str, default='avg')
 parser.add_argument('--gpus', nargs='+', type=int, default=None)
-parser.add_argument('--img_feature_dim',type=int, default=256)
-parser.add_argument('--num_set_segments',type=int, default=1,help='TODO: select multiply set of n-frames from a video')
+parser.add_argument('--img_feature_dim', type=int, default=256)
+parser.add_argument('--num_set_segments', type=int, default=1, help='TODO: select multiply set of n-frames from a video')
 parser.add_argument('--pretrain', type=str, default='imagenet')
 
 args = parser.parse_args()
@@ -116,6 +119,9 @@ modality_list = []
 total_num = None
 for this_weights, this_test_segments, test_file in zip(weights_list, test_segments_list, test_file_list):
     is_shift, shift_div, shift_place = parse_shift_option_from_log_name(this_weights)
+    interval = args.interval
+    num_frame = args.num_frame
+    is_gray = args.gray
     if 'RGB' in this_weights:
         modality = 'RGB'
     else:
@@ -124,12 +130,13 @@ for this_weights, this_test_segments, test_file in zip(weights_list, test_segmen
     modality_list.append(modality)
     num_class, args.train_list, val_list, root_path, prefix = dataset_config.return_dataset(args.dataset,
                                                                                             modality)
-    print('=> shift: {}, shift_div: {}, shift_place: {}'.format(is_shift, shift_div, shift_place))
+    print('=>gray:{}, shift: {}, shift_div: {}, shift_place: {}'.format(is_gray, is_shift, shift_div, shift_place))
     net = TSN(num_class, this_test_segments if is_shift else 1, modality,
               base_model=this_arch,
               consensus_type=args.crop_fusion_type,
               img_feature_dim=args.img_feature_dim,
               pretrain=args.pretrain,
+              is_gray=is_gray,
               is_shift=is_shift, shift_div=shift_div, shift_place=shift_place,
               non_local='_nl' in this_weights,
               )
@@ -173,6 +180,7 @@ for this_weights, this_test_segments, test_file in zip(weights_list, test_segmen
     else:
         raise ValueError("Only 1, 5, 10 crops are supported while we got {}".format(args.test_crops))
 
+    gray = model.grayConvert()
     data_loader = torch.utils.data.DataLoader(
             TSNDataSet(root_path, test_file if test_file is not None else val_list, num_segments=this_test_segments,
                        new_length=1 if modality == "RGB" else 5,
@@ -180,8 +188,12 @@ for this_weights, this_test_segments, test_file in zip(weights_list, test_segmen
                        image_tmpl=prefix,
                        test_mode=True,
                        remove_missing=len(weights_list) == 1,
+                       data_type="image",
+                       interval=interval,
+                       num_frame=num_frame,
                        transform=torchvision.transforms.Compose([
                            cropping,
+                           gray,
                            Stack(roll=(this_arch in ['BNInception', 'InceptionV3'])),
                            ToTorchFormatTensor(div=(this_arch not in ['BNInception', 'InceptionV3'])),
                            GroupNormalize(net.input_mean, net.input_std),

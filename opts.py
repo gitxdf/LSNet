@@ -11,6 +11,7 @@ parser.add_argument('--train_list', type=str, default="")
 parser.add_argument('--val_list', type=str, default="")
 parser.add_argument('--root_path', type=str, default="")
 parser.add_argument('--store_name', type=str, default="")
+parser.add_argument('--data_type', type=str, default='image', help="the input data type (default: image)")
 # ========================= Model Configs ==========================
 parser.add_argument('--arch', type=str, default="BNInception")
 parser.add_argument('--num_segments', type=int, default=3)
@@ -25,6 +26,9 @@ parser.add_argument('--img_feature_dim', default=256, type=int, help="the featur
 parser.add_argument('--suffix', type=str, default=None)
 parser.add_argument('--pretrain', type=str, default='imagenet')
 parser.add_argument('--tune_from', type=str, default=None, help='fine-tune from checkpoint')
+parser.add_argument('--interval', type=int, default=0, help='sample interval in a segment. default:0, continuous sapling')
+parser.add_argument('--num_frame', type=int, default=3, help='number of sample in a segment. default:3')
+parser.add_argument('--fuse_before_net', default=False, action="store_true", help='segment fuse position')
 
 # ========================= Learning Configs ==========================
 parser.add_argument('--epochs', default=120, type=int, metavar='N',
@@ -46,7 +50,7 @@ parser.add_argument('--clip-gradient', '--gd', default=None, type=float,
 parser.add_argument('--no_partialbn', '--npb', default=False, action="store_true")
 
 # ========================= Monitor Configs ==========================
-parser.add_argument('--print-freq', '-p', default=20, type=int,
+parser.add_argument('--print-freq', '-p', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--eval-freq', '-ef', default=5, type=int,
                     metavar='N', help='evaluation frequency (default: 5)')
@@ -64,10 +68,11 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--gpus', nargs='+', type=int, default=None)
 parser.add_argument('--flow_prefix', default="", type=str)
-parser.add_argument('--root_log',type=str, default='log')
+parser.add_argument('--root_log', type=str, default='log')
 parser.add_argument('--root_model', type=str, default='checkpoint')
 
 parser.add_argument('--shift', default=False, action="store_true", help='use shift for models')
+parser.add_argument('--gray', default=False, action="store_true", help='use gray images as the input')
 parser.add_argument('--shift_div', default=8, type=int, help='number of div for shift (default: 8)')
 parser.add_argument('--shift_place', default='blockres', type=str, help='place for shift (default: stageres)')
 

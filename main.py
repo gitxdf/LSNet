@@ -33,17 +33,21 @@ def main():
     full_arch_name = args.arch
     if args.shift:
         full_arch_name += '_shift{}_{}'.format(args.shift_div, args.shift_place)
+    if args.gray:
+        full_arch_name += '_gray'
     if args.temporal_pool:
         full_arch_name += '_tpool'
     args.store_name = '_'.join(
         ['TSM', args.dataset, args.modality, full_arch_name, args.consensus_type, 'segment%d' % args.num_segments,
-         'e{}'.format(args.epochs)])
+         'nf%d' % args.num_frame, 'interval%d' % args.interval, 'e{}'.format(args.epochs)])
     if args.pretrain != 'imagenet':
         args.store_name += '_{}'.format(args.pretrain)
     if args.lr_type != 'step':
         args.store_name += '_{}'.format(args.lr_type)
     if args.dense_sample:
         args.store_name += '_dense'
+    if args.fuse_before_net:
+        args.store_name += '_fusebefore'
     if args.non_local > 0:
         args.store_name += '_nl'
     if args.suffix is not None:
@@ -60,6 +64,9 @@ def main():
                 partial_bn=not args.no_partialbn,
                 pretrain=args.pretrain,
                 is_shift=args.shift, shift_div=args.shift_div, shift_place=args.shift_place,
+                is_gray=args.gray,  #dfxue for gray
+                num_frame=args.num_frame,
+                fuse_before_net=args.fuse_before_net,
                 fc_lr5=not (args.tune_from and args.dataset in args.tune_from),
                 temporal_pool=args.temporal_pool,
                 non_local=args.non_local)
@@ -70,6 +77,7 @@ def main():
     input_std = model.input_std
     policies = model.get_optim_policies()
     train_augmentation = model.get_augmentation(flip=False if 'something' in args.dataset or 'jester' in args.dataset else True)
+    gray = model.grayConvert()
 
     model = torch.nn.DataParallel(model, device_ids=args.gpus).cuda()
 
@@ -143,8 +151,12 @@ def main():
                    new_length=data_length,
                    modality=args.modality,
                    image_tmpl=prefix,
+                   data_type=args.data_type,
+                   interval=args.interval,
+                   num_frame=args.num_frame,
                    transform=torchvision.transforms.Compose([
                        train_augmentation,
+                       gray,  # dfxue 1206 for gray
                        Stack(roll=(args.arch in ['BNInception', 'InceptionV3'])),
                        ToTorchFormatTensor(div=(args.arch not in ['BNInception', 'InceptionV3'])),
                        normalize,
@@ -159,7 +171,11 @@ def main():
                    modality=args.modality,
                    image_tmpl=prefix,
                    random_shift=False,
+                   data_type=args.data_type,
+                   interval=args.interval,
+                   num_frame=args.num_frame,
                    transform=torchvision.transforms.Compose([
+                       gray,
                        GroupScale(int(scale_size)),
                        GroupCenterCrop(crop_size),
                        Stack(roll=(args.arch in ['BNInception', 'InceptionV3'])),
@@ -233,6 +249,11 @@ def train(train_loader, model, criterion, optimizer, epoch, log, tf_writer):
 
     end = time.time()
     for i, (input, target) in enumerate(train_loader):
+        # if epoch == 0:
+        #     continue
+        # else:
+        #     print("******************************* epoch: {}, test end ****************************".format(epoch))
+        #     break
         # measure data loading time
         data_time.update(time.time() - end)
 

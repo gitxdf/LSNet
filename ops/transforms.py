@@ -92,6 +92,20 @@ class GroupScale(object):
         return [self.worker(img) for img in img_group]
 
 
+#dfxue, 20200107 transform images to gray for motion stream
+class GroupGray(object):
+    def __init__(self, gray):
+        self.gray = gray
+
+    def __call__(self, img_group):
+        gray_imgs = []
+        if not self.gray:
+            return img_group
+        for img in img_group:
+            gray_imgs.append(img.convert('L'))
+        return gray_imgs
+
+
 class GroupOverSample(object):
     def __init__(self, crop_size, scale_size=None, flip=True):
         self.crop_size = crop_size if not isinstance(crop_size, int) else (crop_size, crop_size)

@@ -17,6 +17,7 @@ class TSN(nn.Module):
                  dropout=0.8, img_feature_dim=256,
                  crop_num=1, partial_bn=True, print_spec=True, pretrain='imagenet',
                  is_shift=False, shift_div=8, shift_place='blockres', fc_lr5=False,
+                 is_gray=False, num_frame=3, fuse_before_net=False,
                  temporal_pool=False, non_local=False):
         super(TSN, self).__init__()
         self.modality = modality
@@ -28,7 +29,9 @@ class TSN(nn.Module):
         self.consensus_type = consensus_type
         self.img_feature_dim = img_feature_dim  # the dimension of the CNN feature to represent each frame
         self.pretrain = pretrain
-
+        self.gray = is_gray
+        self.fuse_before_net = fuse_before_net
+        self.num_frame = num_frame
         self.is_shift = is_shift
         self.shift_div = shift_div
         self.shift_place = shift_place
@@ -102,6 +105,21 @@ class TSN(nn.Module):
 
         if 'resnet' in base_model:
             self.base_model = getattr(torchvision.models, base_model)(True if self.pretrain == 'imagenet' else False)
+            if (self.gray and self.num_frame != 3) or (self.gray and self.fuse_before_net and self.num_frame*self.num_segments!=3):  # dfxue for gray
+                conv1_weight = getattr(self.base_model, 'conv1').weight
+                if self.fuse_before_net:  # fuse segment before net
+                    new_conv1_size = conv1_weight.shape[:1] + (self.num_frame*self.num_segments,)+conv1_weight.shape[2:]
+                    if self.num_frame == 3:
+                        new_conv1_weight = conv1_weight.repeat(1, self.num_segments, 1, 1)
+                    else:
+                        new_conv1_weight = conv1_weight.mean(dim=1, keepdim=True).expand(new_conv1_size).contiguous()
+                else:  # fuse segment after net
+                    new_conv1_size = conv1_weight.shape[:1] + (self.num_frame,) + conv1_weight.shape[2:]
+                    new_conv1_weight = conv1_weight.mean(dim=1, keepdim=True).expand(new_conv1_size).contiguous()
+                setattr(self.base_model, 'conv1',
+                        nn.Conv2d(new_conv1_size[1], new_conv1_size[0], kernel_size=new_conv1_size[2], stride=2, padding=3, bias=False))
+                self.base_model.conv1.weight.data = new_conv1_weight
+
             if self.is_shift:
                 print('Adding temporal shift...')
                 from ops.temporal_shift import make_temporal_shift
@@ -261,14 +279,20 @@ class TSN(nn.Module):
         ]
 
     def forward(self, input, no_reshape=False):
+        if self.fuse_before_net:  # dfxue for gray
+            no_reshape = True
+            self.reshape = False
         if not no_reshape:
-            sample_len = (3 if self.modality == "RGB" else 2) * self.new_length
+            sample_len = (3 if self.modality == "RGB" else 2) * self.new_length  # tsm
+            if self.gray:
+                sample_len = self.num_frame
 
             if self.modality == 'RGBDiff':
                 sample_len = 3 * self.new_length
                 input = self._get_diff(input)
 
-            base_out = self.base_model(input.view((-1, sample_len) + input.size()[-2:]))
+            input = input.view((-1, sample_len) + input.size()[-2:])  #dfxue sample_len
+            base_out = self.base_model(input)
         else:
             base_out = self.base_model(input)
 
@@ -281,10 +305,12 @@ class TSN(nn.Module):
         if self.reshape:
             if self.is_shift and self.temporal_pool:
                 base_out = base_out.view((-1, self.num_segments // 2) + base_out.size()[1:])
-            else:
+            else:  # tsn
                 base_out = base_out.view((-1, self.num_segments) + base_out.size()[1:])
             output = self.consensus(base_out)
             return output.squeeze(1)
+        else:  # dfxue for gray
+            return base_out
 
     def _get_diff(self, input, keep_rgb=False):
         input_c = 3 if self.modality in ["RGB", "RGBDiff"] else 2
@@ -392,3 +418,6 @@ class TSN(nn.Module):
         elif self.modality == 'RGBDiff':
             return torchvision.transforms.Compose([GroupMultiScaleCrop(self.input_size, [1, .875, .75]),
                                                    GroupRandomHorizontalFlip(is_flow=False)])
+
+    def grayConvert(self):
+        return GroupGray(self.gray)
